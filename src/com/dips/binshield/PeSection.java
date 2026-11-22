@@ -6,14 +6,22 @@ public final class PeSection {
     private static final int IMAGE_SCN_MEM_WRITE = 0x80000000;
 
     private final String name;
+    private final int virtualAddress;
     private final int virtualSize;
     private final int rawSize;
     private final int rawOffset;
     private final int characteristics;
     private final double entropy;
 
-    public PeSection(String name, int virtualSize, int rawSize, int rawOffset, int characteristics, double entropy) {
+    public PeSection(String name,
+                     int virtualAddress,
+                     int virtualSize,
+                     int rawSize,
+                     int rawOffset,
+                     int characteristics,
+                     double entropy) {
         this.name = name;
+        this.virtualAddress = virtualAddress;
         this.virtualSize = virtualSize;
         this.rawSize = rawSize;
         this.rawOffset = rawOffset;
@@ -23,6 +31,10 @@ public final class PeSection {
 
     public String name() {
         return name;
+    }
+
+    public int virtualAddress() {
+        return virtualAddress;
     }
 
     public int virtualSize() {
@@ -39,6 +51,13 @@ public final class PeSection {
 
     public double entropy() {
         return entropy;
+    }
+
+    public boolean containsRva(int rva) {
+        long uRva = rva & 0xFFFFFFFFL;
+        long start = virtualAddress & 0xFFFFFFFFL;
+        long span = Math.max(virtualSize & 0xFFFFFFFFL, rawSize & 0xFFFFFFFFL);
+        return uRva >= start && uRva < start + span;
     }
 
     public boolean isReadable() {

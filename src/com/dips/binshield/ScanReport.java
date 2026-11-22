@@ -11,7 +11,7 @@ public final class ScanReport {
         LOW
     }
 
-    public record Finding(Severity severity, String category, String detail, int score) {
+    public record Finding(Severity severity, String technique, String category, String detail, int score) {
     }
 
     private final Path file;
@@ -43,7 +43,7 @@ public final class ScanReport {
         this.findings = findings;
         this.urls = urls;
         this.ips = ips;
-        this.riskScore = Math.min(100, riskScore);
+        this.riskScore = Math.max(0, Math.min(100, riskScore));
         this.elapsedMs = elapsedMs;
     }
 

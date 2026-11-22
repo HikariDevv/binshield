@@ -8,8 +8,8 @@
 [![Dependencies](https://img.shields.io/badge/Dependencies-0-16a34a?style=flat-square)](https://github.com/HikariDevv/binshield)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-Inspects Windows executables and DLLs locally without uploading files to third-party servers.<br/>
-Parses PE headers, computes per-section Shannon entropy, flags suspicious Windows APIs, and extracts embedded IOCs.
+Inspects Windows PE32 / PE32+ binaries locally without uploading files to external servers.<br/>
+Parses real PE headers and the Import Address Table (IAT), detects packers/overlays, maps findings to **MITRE ATT&CK**, and extracts embedded IOCs.
 
 </div>
 
@@ -21,11 +21,11 @@ Parses PE headers, computes per-section Shannon entropy, flags suspicious Window
 $ java -jar dist/binshield.jar sample.exe
 
   binshield — static PE analysis
-  File     : sample.exe (312.40 KB)
-  SHA-256  : 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
-  Entropy  : 7.41 / 8.00
-  PE Type  : EXE · x64 (64-bit) · Windows GUI
-  Compiled : 2026-10-14T19:22:10Z
+  File      : sample.exe (312.40 KB)
+  SHA-256   : 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+  Entropy   : 7.41 / 8.00
+  PE Type   : EXE · x64 (64-bit) · Native · Windows GUI · Unsigned
+  Imports   : 2 DLLs (9 functions)
 
   SECTION    RAW_SIZE   VIRT_SIZE  FLAGS  ENTROPY
   UPX0       0          131072     RWX    0.00
@@ -33,26 +33,27 @@ $ java -jar dist/binshield.jar sample.exe
   .rsrc      18432      18040      R--    4.18
 
   Findings (3):
-  [CRITICAL] PE Section                   RWX section detected: UPX1 (RWX) (+28)
-  [HIGH    ] Packing / Encryption         High entropy in UPX1 (7.92) (+20)
-  [CRITICAL] Process Injection            Matched: VirtualAllocEx, WriteProcessMemory, CreateRemoteThread (+30)
+  [CRITICAL] T1027     RWX PE Section             UPX1 has Read+Write+Execute (RWX) (+30)
+  [HIGH    ] T1027.002 High Section Entropy       UPX1 entropy 7.92 (packed/encrypted) (+22)
+  [HIGH    ] T1027.007 Dynamic API Stub           LoadLibrary + GetProcAddress with only 9 total imports (+22)
 
-  Verdict  : HIGH RISK (78/100)  [12.4 ms]
+  Verdict   : HIGH RISK (74/100)  [11.2 ms]
 ```
 
 ---
 
-## What It Checks
+## Analysis Engine
 
-| Category | Signals Analyzed |
-| :--- | :--- |
-| **PE Binary Structure** | DOS/COFF/Optional headers, architecture (`x86`/`x64`/`ARM64`), EXE vs DLL, subsystem, compile timestamp, and section table. |
-| **Packers & RWX Sections** | Flags `RWX` (Read + Write + Execute) sections and known packer names (`UPX`, `VMProtect`, `Themida`, `ASPack`, `MPRESS`). |
-| **Shannon Entropy** | Computes exact entropy (`0.00–8.00`) per section to spot encrypted or obfuscated payloads (`>= 7.25`). |
-| **Process Injection** | `VirtualAllocEx`, `WriteProcessMemory`, `CreateRemoteThread`, `NtUnmapViewOfSection`, `QueueUserAPC`. |
-| **Keyloggers & Stealers** | `SetWindowsHookEx`, `GetAsyncKeyState`, `CryptUnprotectData`, browser/Discord token paths, and embedded webhooks. |
-| **Persistence & Evasion** | Registry `Run` keys, `schtasks`, `IsDebuggerPresent`, `AmsiScanBuffer`, `EtwEventWrite`, hidden PowerShell commands. |
-| **IOC Extraction** | Extracts ASCII & UTF-16LE embedded URLs, public IPv4 addresses, and SHA-256 hash. |
+| Layer | What It Inspects | MITRE ATT&CK |
+| :--- | :--- | :---: |
+| **PE32 / PE32+ Parser** | DOS/COFF/Optional headers, architecture, EXE/DLL, `.NET` CLR header, Authenticode signature presence, entry-point anomalies, and PE overlays. | `T1027.009` |
+| **Real IAT Parser** | Resolves Data Directory #1 via RVA-to-file-offset mapping to list every imported DLL and Windows API function. | `T1027.007` |
+| **Packers & RWX** | Flags `RWX` sections, high per-section Shannon entropy (`>= 7.25`), and known packers (`UPX`, `VMProtect`, `Themida`, `ASPack`, `MPRESS`). | `T1027.002` |
+| **Process Injection** | `VirtualAllocEx`, `WriteProcessMemory`, `CreateRemoteThread`, `NtUnmapViewOfSection`, `QueueUserAPC`, `SetThreadContext`. | `T1055` |
+| **Keyloggers & Spyware** | `SetWindowsHookEx`, `GetAsyncKeyState`, `GetClipboardData`, `BitBlt`, `CreateCompatibleBitmap`. | `T1056` / `T1113` |
+| **Stealers & Webhooks** | `CryptUnprotectData`, browser/Discord/crypto wallet paths, Discord webhooks, and Telegram bot endpoints. | `T1555` / `T1041` |
+| **Defense Evasion** | `AmsiScanBuffer`, `EtwEventWrite`, Defender exclusion commands, `IsDebuggerPresent`, `VirtualProtect`. | `T1562` / `T1622` |
+| **Persistence & Execution** | Registry `Run` keys, `schtasks /create`, Windows services, hidden PowerShell, `certutil`, `URLDownloadToFile`. | `T1547` / `T1059` |
 
 ---
 
@@ -81,46 +82,31 @@ jar cfe dist/binshield.jar com.dips.binshield.Main -C out .
 
 ## Usage
 
-### Scan a single `.exe` or `.dll`
+### Scan a file
 ```bash
-java -jar dist/binshield.jar C:\path\to\program.exe
+java -jar dist/binshield.jar C:\path\to\file.exe
 ```
 
-### Recursively scan a folder for `.exe`, `.dll`, and `.sys`
+### Inspect the full Import Table (IAT) and all IOCs
+```bash
+java -jar dist/binshield.jar file.dll --imports --iocs
+```
+
+### Recursively scan a folder
 ```bash
 java -jar dist/binshield.jar scan ./downloads
 ```
 
-### JSON output for automation / CI
+### JSON output
 ```bash
-java -jar dist/binshield.jar scan sample.dll --json
-```
-
----
-
-## Project Structure
-
-```text
-binshield/
-├── LICENSE
-├── README.md
-└── src/com/dips/binshield/
-    ├── Main.java
-    ├── PeParser.java
-    ├── PeHeader.java
-    ├── PeSection.java
-    ├── Entropy.java
-    ├── StringExtractor.java
-    ├── RuleEngine.java
-    ├── ScanReport.java
-    └── Reporter.java
+java -jar dist/binshield.jar scan file.exe --json
 ```
 
 ---
 
 ## Note
 
-`binshield` performs **static heuristic analysis** and does not replace a full antivirus or sandboxed dynamic analysis. Legitimate packed installers or game anti-cheats may trigger high-entropy or anti-debug findings.
+`binshield` performs **static heuristic analysis** and does not replace a full antivirus or dynamic sandbox. Legitimate packed installers or game anti-cheats may trigger high-entropy or anti-debug findings.
 
 ## License
 

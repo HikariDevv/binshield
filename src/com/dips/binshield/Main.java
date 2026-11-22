@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 public final class Main {
-    private static final String VERSION = "1.0.0";
+    private static final String VERSION = "2.0.0";
 
     public static void main(String[] args) {
         if (args.length == 0 || args[0].equals("-h") || args[0].equals("--help") || args[0].equals("help")) {
@@ -21,6 +21,8 @@ public final class Main {
         Path target = null;
         boolean json = false;
         boolean color = true;
+        boolean showImports = false;
+        boolean showAllIocs = false;
 
         int start = args[0].equalsIgnoreCase("scan") ? 1 : 0;
         for (int i = start; i < args.length; i++) {
@@ -29,6 +31,10 @@ public final class Main {
                 json = true;
             } else if (arg.equals("--no-color")) {
                 color = false;
+            } else if (arg.equals("--imports")) {
+                showImports = true;
+            } else if (arg.equals("--iocs")) {
+                showAllIocs = true;
             } else if (arg.startsWith("-")) {
                 System.err.println("Unknown option: " + arg);
                 System.exit(2);
@@ -49,7 +55,7 @@ public final class Main {
                 if (json) {
                     Reporter.printJson(report);
                 } else {
-                    Reporter.printText(report, color);
+                    Reporter.printText(report, color, showImports, showAllIocs);
                 }
                 if (report.riskScore() >= 35) {
                     exitCode = 1;
@@ -66,7 +72,7 @@ public final class Main {
                     if (json) {
                         Reporter.printJson(report);
                     } else {
-                        Reporter.printText(report, color);
+                        Reporter.printText(report, color, showImports, showAllIocs);
                     }
                     if (report.riskScore() >= 35) {
                         exitCode = 1;
@@ -90,10 +96,16 @@ public final class Main {
             binshield %s — static PE (.exe/.dll) malware & RAT analyzer
 
             Usage:
-              java -jar binshield.jar scan <file|folder> [--json] [--no-color]
-              java -jar binshield.jar <file.exe>
-              java -jar binshield.jar version
-              java -jar binshield.jar help
+              java -jar binshield.jar scan <file|folder> [options]
+              java -jar binshield.jar <file.exe> [options]
+
+            Options:
+              --imports     Print parsed PE Import Address Table (DLLs & functions)
+              --iocs        Show up to 50 extracted URLs and public IPs
+              --json        Output structured JSON report
+              --no-color    Disable ANSI terminal colors
+              -v, --version Print version
+              -h, --help    Show help
 
             Exit codes:
               0  Clean or low risk
